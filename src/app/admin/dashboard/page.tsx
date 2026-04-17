@@ -38,15 +38,15 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <p className="text-slate-500">Overview of your team&apos;s time tracking.</p>
+        <h1 className="text-3xl font-display text-brand-700">Admin Dashboard</h1>
+        <p className="text-brand-400">Overview of your team&apos;s time tracking.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="Employees" value={stats.employees} color="bg-blue-100 text-blue-700" />
-        <StatCard icon={Clock} label="Clocked in now" value={stats.clockedIn} color="bg-emerald-100 text-emerald-700" />
-        <StatCard icon={CalendarCheck} label="Entries today" value={stats.entriesToday} color="bg-amber-100 text-amber-700" />
-        <StatCard icon={Timer} label="Hours today" value={formatMinutesAsHours(stats.totalHoursToday)} color="bg-purple-100 text-purple-700" />
+        <StatCard icon={Users} label="Employees" value={stats.employees} color="bg-brand-100 text-brand-700" />
+        <StatCard icon={Clock} label="Clocked in now" value={stats.clockedIn} color="bg-moss-300/40 text-moss-700" />
+        <StatCard icon={CalendarCheck} label="Entries today" value={stats.entriesToday} color="bg-ochre-400/25 text-ochre-600" />
+        <StatCard icon={Timer} label="Hours today" value={formatMinutesAsHours(stats.totalHoursToday)} color="bg-cream-200 text-brand-600" />
       </div>
 
       <Card>
