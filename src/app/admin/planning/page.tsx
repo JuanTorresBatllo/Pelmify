@@ -141,11 +141,6 @@ export default function PlanningPage() {
       setModifying((prev) => { const n = new Set(prev); n.delete(day.dateKey); return n; });
     }
     setSaving(null);
-    setTimeout(() => {
-      setDays((prev) =>
-        prev.map((d) => (d.dateKey === day.dateKey ? { ...d, saved: false } : d))
-      );
-    }, 2000);
   };
 
   // ── Bulk actions ─────────────────────────────────────────────────────────────
