@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
-import { listUsers, listSchedulesForUser, upsertSchedule, deleteSchedule } from "@/lib/db";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Copy, Check, Users } from "lucide-react";
+import {
+  listUsers,
+  listAllSchedules,
+  listSchedulesForUser,
+  upsertSchedule,
+} from "@/lib/db";
 import { UserProfile, Schedule } from "@/types";
 import { Button } from "@/components/Button";
 import { Card, CardBody } from "@/components/Card";
@@ -12,7 +17,7 @@ import { cn, formatDateKey } from "@/lib/utils";
 
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
-  const day = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+  const day = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - day);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -31,9 +36,7 @@ function formatWeekLabel(monday: Date): string {
 }
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const DAY_SHORT  = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 interface DayPlan {
   dateKey: string;
@@ -42,13 +45,10 @@ interface DayPlan {
   short: string;
   isWeekend: boolean;
   schedule: Schedule | null;
-  // local editable state
   hours: number;
   isDayOff: boolean;
-  saved: boolean; // true briefly after saving
+  saved: boolean;
 }
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PlanningPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -56,8 +56,9 @@ export default function PlanningPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOfWeek(new Date()));
   const [days, setDays] = useState<DayPlan[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
-  const [modifying, setModifying] = useState<Set<string>>(new Set()); // past days unlocked for editing
+  const [modifying, setModifying] = useState<Set<string>>(new Set());
 
   const todayKey = formatDateKey(new Date());
   const isPast = (dateKey: string) => dateKey < todayKey;
@@ -72,7 +73,12 @@ export default function PlanningPage() {
     });
   };
 
-  // ── Load users ──────────────────────────────────────────────────────────────
+  const weekDateKeys = useMemo(
+    () => DAY_LABELS.map((_, i) => formatDateKey(addDays(weekStart, i))),
+    [weekStart]
+  );
+
+  // Load users
   useEffect(() => {
     listUsers().then((u) => {
       const employees = u.filter((x) => x.active !== false);
@@ -81,10 +87,20 @@ export default function PlanningPage() {
     });
   }, []);
 
-  // ── Load schedules for selected user ────────────────────────────────────────
+  // Load ALL schedules (team overview)
+  const loadAllSchedules = useCallback(async () => {
+    const s = await listAllSchedules();
+    setAllSchedules(s);
+  }, []);
+
+  useEffect(() => {
+    loadAllSchedules();
+  }, [loadAllSchedules]);
+
+  // Load schedules for selected user
   const loadSchedules = useCallback(async () => {
     if (!selectedUserId) return;
-    setModifying(new Set()); // reset locks on employee change
+    setModifying(new Set());
     const s = await listSchedulesForUser(selectedUserId);
     setSchedules(s);
   }, [selectedUserId]);
@@ -93,9 +109,9 @@ export default function PlanningPage() {
     loadSchedules();
   }, [loadSchedules]);
 
-  // ── Build day grid whenever week or schedules change ─────────────────────────
+  // Build day grid
   useEffect(() => {
-    setModifying(new Set()); // reset locks on week change
+    setModifying(new Set());
     const built: DayPlan[] = DAY_LABELS.map((label, i) => {
       const date = addDays(weekStart, i);
       const dateKey = formatDateKey(date);
@@ -116,7 +132,24 @@ export default function PlanningPage() {
     setDays(built);
   }, [weekStart, schedules]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Team overview
+  const teamOverview = useMemo(() => {
+    return users.map((u) => {
+      const userSchedules = allSchedules.filter(
+        (s) => s.userId === u.id && weekDateKeys.includes(s.date)
+      );
+      const perDay = weekDateKeys.map((dk) => {
+        const sched = userSchedules.find((s) => s.date === dk);
+        if (!sched) return null;
+        if (sched.isDayOff) return "off" as const;
+        return sched.plannedHours;
+      });
+      const totalPlanned = userSchedules
+        .filter((s) => !s.isDayOff)
+        .reduce((sum, s) => sum + s.plannedHours, 0);
+      return { user: u, perDay, totalPlanned };
+    });
+  }, [users, allSchedules, weekDateKeys]);
 
   const updateDay = (dateKey: string, patch: Partial<DayPlan>) => {
     setDays((prev) =>
@@ -136,42 +169,24 @@ export default function PlanningPage() {
     setDays((prev) =>
       prev.map((d) => (d.dateKey === day.dateKey ? { ...d, saved: true } : d))
     );
-    // Lock past day again after saving
     if (isPast(day.dateKey)) {
-      setModifying((prev) => { const n = new Set(prev); n.delete(day.dateKey); return n; });
-    }
-    setSaving(null);
-  };
-
-  // ── Bulk actions ─────────────────────────────────────────────────────────────
-
-  const applyStandard = async () => {
-    if (!selectedUserId) return;
-    for (const day of days) {
-      await upsertSchedule({
-        userId: selectedUserId,
-        date: day.dateKey,
-        plannedHours: 8,
-        isDayOff: false,
+      setModifying((prev) => {
+        const n = new Set(prev);
+        n.delete(day.dateKey);
+        return n;
       });
     }
-    await loadSchedules();
+    setSaving(null);
+    await loadAllSchedules();
   };
 
   const copyPreviousWeek = async () => {
     if (!selectedUserId) return;
     const prevMonday = addDays(weekStart, -7);
-    const prevDays = DAY_LABELS.map((_, i) => formatDateKey(addDays(prevMonday, i)));
-    const prevSchedules = schedules.filter((s) => prevDays.includes(s.date));
-    for (const day of days) {
-      const idx = DAY_LABELS.findIndex((_, i) => formatDateKey(addDays(prevMonday, i)) === day.dateKey.replace(
-        formatDateKey(weekStart).slice(0, 8),
-        formatDateKey(prevMonday).slice(0, 8)
-      ));
-      // simpler: find by day-of-week offset
-      const dayIndex = days.indexOf(day);
-      const prevKey = formatDateKey(addDays(prevMonday, dayIndex));
-      const prev = prevSchedules.find((s) => s.date === prevKey);
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const prevKey = formatDateKey(addDays(prevMonday, i));
+      const prev = schedules.find((s) => s.date === prevKey);
       await upsertSchedule({
         userId: selectedUserId,
         date: day.dateKey,
@@ -180,14 +195,7 @@ export default function PlanningPage() {
       });
     }
     await loadSchedules();
-  };
-
-  const clearWeek = async () => {
-    if (!selectedUserId) return;
-    for (const day of days) {
-      if (day.schedule) await deleteSchedule(day.schedule.id);
-    }
-    await loadSchedules();
+    await loadAllSchedules();
   };
 
   const [savingAll, setSavingAll] = useState(false);
@@ -205,6 +213,7 @@ export default function PlanningPage() {
       });
     }
     await loadSchedules();
+    await loadAllSchedules();
     setSavingAll(false);
     setAllSaved(true);
     setTimeout(() => setAllSaved(false), 2000);
@@ -212,13 +221,16 @@ export default function PlanningPage() {
 
   const totalPlanned = days.filter((d) => !d.isDayOff).reduce((s, d) => s + d.hours, 0);
   const selectedUser = users.find((u) => u.id === selectedUserId);
+  const contractHours = selectedUser?.plannedHoursPerWeek ?? 40;
+  const remaining = contractHours - totalPlanned;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Planning</h1>
-        <p className="text-slate-500">Set planned hours per day, per employee, for any week.</p>
+        <h1 className="text-3xl font-display text-brand-700">Planning</h1>
+        <p className="text-brand-400">
+          Set planned hours per day, per employee, for any week.
+        </p>
       </div>
 
       {/* Employee selector */}
@@ -230,8 +242,8 @@ export default function PlanningPage() {
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
               selectedUserId === u.id
-                ? "bg-brand-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                ? "bg-brand-600 text-cream-50 shadow-soft"
+                : "bg-cream-100 text-brand-600 hover:bg-cream-200 border border-cream-200"
             )}
           >
             {u.name}
@@ -242,37 +254,201 @@ export default function PlanningPage() {
       {/* Week navigator */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Week</div>
-          <div className="font-semibold text-lg">{formatWeekLabel(weekStart)}</div>
+          <div className="text-xs text-brand-400 uppercase tracking-wider mb-0.5">
+            Week
+          </div>
+          <div className="font-display text-lg text-brand-700">
+            {formatWeekLabel(weekStart)}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setWeekStart((w) => addDays(w, -7))}
-            className="p-2 rounded-lg hover:bg-slate-100"
+            className="p-2 rounded-lg hover:bg-cream-100"
             title="Previous week"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5 text-brand-600" />
           </button>
           <button
             onClick={() => setWeekStart(getMondayOfWeek(new Date()))}
             className={cn(
               "px-3 py-1.5 text-sm rounded-lg font-medium transition-colors",
-              formatDateKey(weekStart) === formatDateKey(getMondayOfWeek(new Date()))
-                ? "bg-brand-600 text-white"
-                : "hover:bg-slate-100"
+              formatDateKey(weekStart) ===
+                formatDateKey(getMondayOfWeek(new Date()))
+                ? "bg-brand-600 text-cream-50"
+                : "hover:bg-cream-100 text-brand-600"
             )}
           >
-            {formatWeekLabel(weekStart)}
+            Today
           </button>
           <button
             onClick={() => setWeekStart((w) => addDays(w, 7))}
-            className="p-2 rounded-lg hover:bg-slate-100"
+            className="p-2 rounded-lg hover:bg-cream-100"
             title="Next week"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-5 h-5 text-brand-600" />
           </button>
         </div>
       </div>
+
+      {/* TEAM OVERVIEW */}
+      <Card>
+        <CardBody className="p-0">
+          <div className="px-6 py-3 border-b border-cream-200/80 flex items-center gap-2">
+            <Users className="w-4 h-4 text-brand-400" />
+            <span className="font-display text-sm text-brand-700">
+              Team overview — this week
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-cream-50 text-brand-400 uppercase tracking-wider">
+                  <th className="text-left px-4 py-2 font-medium">Employee</th>
+                  {DAY_SHORT.map((d, i) => (
+                    <th
+                      key={d}
+                      className={cn(
+                        "text-center px-2 py-2 font-medium",
+                        i >= 5 && "bg-cream-100/60"
+                      )}
+                    >
+                      {d}
+                    </th>
+                  ))}
+                  <th className="text-center px-3 py-2 font-medium">Total</th>
+                  <th className="text-center px-3 py-2 font-medium">Contract</th>
+                  <th className="text-center px-3 py-2 font-medium">Diff</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-200/60">
+                {teamOverview.map(({ user: u, perDay, totalPlanned: tp }) => {
+                  const contract = u.plannedHoursPerWeek ?? 40;
+                  const diff = contract - tp;
+                  const isSelected = u.id === selectedUserId;
+                  return (
+                    <tr
+                      key={u.id}
+                      onClick={() => setSelectedUserId(u.id)}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        isSelected ? "bg-brand-50/60" : "hover:bg-cream-50"
+                      )}
+                    >
+                      <td
+                        className={cn(
+                          "px-4 py-2 font-medium whitespace-nowrap",
+                          isSelected ? "text-brand-700" : "text-brand-600"
+                        )}
+                      >
+                        {u.name}
+                      </td>
+                      {perDay.map((val, i) => (
+                        <td
+                          key={i}
+                          className={cn(
+                            "text-center px-2 py-2",
+                            i >= 5 && "bg-cream-100/30"
+                          )}
+                        >
+                          {val === null ? (
+                            <span className="text-brand-300">—</span>
+                          ) : val === "off" ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-cream-200 text-brand-400 font-medium">
+                              off
+                            </span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-block min-w-[2rem] px-1.5 py-0.5 rounded font-semibold",
+                                val > 0
+                                  ? "bg-moss-300/30 text-moss-700"
+                                  : "text-brand-300"
+                              )}
+                            >
+                              {val}h
+                            </span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="text-center px-3 py-2 font-semibold text-brand-700">
+                        {tp}h
+                      </td>
+                      <td className="text-center px-3 py-2 text-brand-400">
+                        {contract}h
+                      </td>
+                      <td
+                        className={cn(
+                          "text-center px-3 py-2 font-semibold",
+                          diff > 0
+                            ? "text-ochre-600"
+                            : diff < 0
+                              ? "text-red-600"
+                              : "text-moss-700"
+                        )}
+                      >
+                        {diff > 0
+                          ? `${diff}h left`
+                          : diff < 0
+                            ? `${Math.abs(diff)}h over`
+                            : "✓"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* CONTRACT COUNTER for selected employee */}
+      {selectedUser && (
+        <Card
+          className={cn(
+            remaining < 0
+              ? "border-red-200"
+              : remaining === 0
+                ? "border-moss-300"
+                : ""
+          )}
+        >
+          <CardBody className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-xs text-brand-400 uppercase tracking-wider">
+                {selectedUser.name}&apos;s week
+              </div>
+              <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                <span className="text-2xl font-display text-brand-700">
+                  {totalPlanned}h
+                </span>
+                <span className="text-brand-400">planned</span>
+                <span className="text-brand-300 mx-1">/</span>
+                <span className="text-lg font-semibold text-brand-500">
+                  {contractHours}h
+                </span>
+                <span className="text-brand-400">contract</span>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "text-right px-4 py-2 rounded-xl font-display text-lg",
+                remaining > 0 && "bg-ochre-400/15 text-ochre-600",
+                remaining === 0 && "bg-moss-300/25 text-moss-700",
+                remaining < 0 && "bg-red-50 text-red-700"
+              )}
+            >
+              {remaining > 0 ? (
+                <>{remaining}h remaining</>
+              ) : remaining === 0 ? (
+                <>✓ Complete</>
+              ) : (
+                <>{Math.abs(remaining)}h over contract</>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2">
@@ -281,9 +457,15 @@ export default function PlanningPage() {
         </Button>
         <Button size="sm" onClick={saveAll} disabled={savingAll}>
           {allSaved ? (
-            <span className="flex items-center gap-1"><Check className="w-4 h-4" /> All saved</span>
-          ) : savingAll ? "Saving…" : (
-            <span className="flex items-center gap-1"><Check className="w-4 h-4" /> Save all</span>
+            <span className="flex items-center gap-1">
+              <Check className="w-4 h-4" /> All saved
+            </span>
+          ) : savingAll ? (
+            "Saving…"
+          ) : (
+            <span className="flex items-center gap-1">
+              <Check className="w-4 h-4" /> Save all
+            </span>
           )}
         </Button>
       </div>
@@ -295,25 +477,24 @@ export default function PlanningPage() {
             key={day.dateKey}
             className={cn(
               "transition-colors",
-              day.isWeekend && "bg-slate-50",
+              day.isWeekend && "bg-cream-50/60",
               day.isDayOff && "opacity-60",
               isLocked(day.dateKey) && "opacity-75"
             )}
           >
             <CardBody className="p-4 space-y-3">
-              {/* Day label + date */}
               <div>
-                <div className="font-bold text-sm text-slate-800">
-                  {day.label}
-                </div>
-                <div className="text-xs text-slate-400">
-                  {day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                <div className="font-bold text-sm text-brand-700">{day.label}</div>
+                <div className="text-xs text-brand-400">
+                  {day.date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
                 </div>
               </div>
 
-              {/* Past day — Modify toggle */}
               {isPast(day.dateKey) && (
-                <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs text-brand-400 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={modifying.has(day.dateKey)}
@@ -324,27 +505,33 @@ export default function PlanningPage() {
                 </label>
               )}
 
-              {/* Day off toggle — hidden when locked */}
               {!isLocked(day.dateKey) && (
-                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs text-brand-500 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={day.isDayOff}
-                    onChange={(e) => updateDay(day.dateKey, { isDayOff: e.target.checked })}
+                    onChange={(e) =>
+                      updateDay(day.dateKey, { isDayOff: e.target.checked })
+                    }
                     className="rounded"
                   />
                   Day off
                 </label>
               )}
 
-              {/* Hours input — hidden when locked or day off */}
               {!isLocked(day.dateKey) && !day.isDayOff && (
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Hours</label>
+                  <label className="block text-xs text-brand-400 mb-1">
+                    Hours
+                  </label>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => updateDay(day.dateKey, { hours: Math.max(0, day.hours - 0.5) })}
-                      className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-sm"
+                      onClick={() =>
+                        updateDay(day.dateKey, {
+                          hours: Math.max(0, day.hours - 0.5),
+                        })
+                      }
+                      className="w-7 h-7 rounded bg-cream-100 hover:bg-cream-200 text-brand-600 font-bold flex items-center justify-center text-sm"
                     >
                       −
                     </button>
@@ -354,12 +541,18 @@ export default function PlanningPage() {
                       max={24}
                       step={0.5}
                       value={day.hours}
-                      onChange={(e) => updateDay(day.dateKey, { hours: Number(e.target.value) })}
-                      className="w-14 text-center rounded border border-slate-300 px-1 py-1 text-sm font-semibold"
+                      onChange={(e) =>
+                        updateDay(day.dateKey, { hours: Number(e.target.value) })
+                      }
+                      className="w-14 text-center rounded border border-cream-200 px-1 py-1 text-sm font-semibold"
                     />
                     <button
-                      onClick={() => updateDay(day.dateKey, { hours: Math.min(24, day.hours + 0.5) })}
-                      className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-sm"
+                      onClick={() =>
+                        updateDay(day.dateKey, {
+                          hours: Math.min(24, day.hours + 0.5),
+                        })
+                      }
+                      className="w-7 h-7 rounded bg-cream-100 hover:bg-cream-200 text-brand-600 font-bold flex items-center justify-center text-sm"
                     >
                       +
                     </button>
@@ -367,9 +560,8 @@ export default function PlanningPage() {
                 </div>
               )}
 
-              {/* Locked past day — show saved pill */}
               {isLocked(day.dateKey) && (
-                <div className="w-full py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 text-center">
+                <div className="w-full py-1.5 rounded-lg text-xs font-medium bg-moss-300/20 text-moss-700 text-center">
                   <span className="flex items-center justify-center gap-1">
                     <Check className="w-3 h-3" />
                     {day.isDayOff ? "Day off" : `${day.hours}h planned`}
@@ -377,7 +569,6 @@ export default function PlanningPage() {
                 </div>
               )}
 
-              {/* Save button — only when not locked */}
               {!isLocked(day.dateKey) && (
                 <button
                   onClick={() => saveDay(day)}
@@ -385,8 +576,8 @@ export default function PlanningPage() {
                   className={cn(
                     "w-full py-1.5 rounded-lg text-xs font-medium transition-colors",
                     day.saved
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+                      ? "bg-moss-300/25 text-moss-700"
+                      : "bg-brand-600 text-cream-50 hover:bg-brand-700 disabled:opacity-50"
                   )}
                 >
                   {day.saved ? (
@@ -404,26 +595,6 @@ export default function PlanningPage() {
           </Card>
         ))}
       </div>
-
-      {/* Week summary */}
-      <Card>
-        <CardBody className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-xs text-slate-500 uppercase tracking-wider">Total planned this week</div>
-            <div className="text-2xl font-bold">
-              {totalPlanned}h{" "}
-              <span className="text-sm font-normal text-slate-500">
-                ({days.filter((d) => !d.isDayOff).length} working days)
-              </span>
-            </div>
-          </div>
-          {selectedUser && (
-            <div className="text-sm text-slate-500">
-              Employee: <span className="font-medium text-slate-800">{selectedUser.name}</span>
-            </div>
-          )}
-        </CardBody>
-      </Card>
     </div>
   );
 }
