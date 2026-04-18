@@ -124,7 +124,7 @@ export default function PlanningPage() {
         short: DAY_SHORT[i],
         isWeekend,
         schedule,
-        hours: schedule ? (schedule.isDayOff ? 0 : schedule.plannedHours) : 8,
+        hours: schedule ? (schedule.isDayOff ? 0 : schedule.plannedHours) : 0,
         isDayOff: schedule ? schedule.isDayOff : false,
         saved: false,
       };
