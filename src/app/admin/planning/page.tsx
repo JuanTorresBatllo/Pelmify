@@ -132,9 +132,23 @@ export default function PlanningPage() {
     setDays(built);
   }, [weekStart, schedules]);
 
-  // Team overview
+  // Team overview — for the selected employee use local `days` state so the
+  // numbers always match the day cards and contract counter below.
   const teamOverview = useMemo(() => {
     return users.map((u) => {
+      // Selected employee → derive from local editing state
+      if (u.id === selectedUserId && days.length > 0) {
+        const perDay = days.map((d) => {
+          if (d.isDayOff) return "off" as const;
+          return d.hours;
+        });
+        const tp = days
+          .filter((d) => !d.isDayOff)
+          .reduce((s, d) => s + d.hours, 0);
+        return { user: u, perDay, totalPlanned: tp };
+      }
+
+      // Other employees → use saved Firestore data
       const userSchedules = allSchedules.filter(
         (s) => s.userId === u.id && weekDateKeys.includes(s.date)
       );
@@ -149,7 +163,7 @@ export default function PlanningPage() {
         .reduce((sum, s) => sum + s.plannedHours, 0);
       return { user: u, perDay, totalPlanned };
     });
-  }, [users, allSchedules, weekDateKeys]);
+  }, [users, allSchedules, weekDateKeys, selectedUserId, days]);
 
   const updateDay = (dateKey: string, patch: Partial<DayPlan>) => {
     setDays((prev) =>
