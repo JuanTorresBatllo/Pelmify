@@ -72,7 +72,7 @@ export async function clockIn(user: UserProfile): Promise<string> {
   return ref.id;
 }
 
-export async function clockOut(entry: TimeEntry) {
+export async function clockOut(entry: TimeEntry, lunchDeducted = false) {
   const now = new Date();
   const start = toDate(entry.clockIn)!;
   let breakMin = 0;
@@ -81,10 +81,12 @@ export async function clockOut(entry: TimeEntry) {
     const be = toDate(b.end) || now;
     if (bs) breakMin += minutesBetween(bs, be);
   }
-  const total = Math.max(0, minutesBetween(start, now) - breakMin);
+  const raw = Math.max(0, minutesBetween(start, now) - breakMin);
+  const total = lunchDeducted ? Math.max(0, raw - 30) : raw;
   await updateDoc(doc(db, "timeEntries", entry.id), {
     clockOut: Timestamp.fromDate(now),
     totalMinutes: total,
+    lunchDeducted,
     breaks: (entry.breaks || []).map((b) => ({
       start: b.start,
       end: b.end || Timestamp.fromDate(now),

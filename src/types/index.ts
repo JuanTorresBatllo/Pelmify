@@ -26,6 +26,7 @@ export interface TimeEntry {
   clockOut: Timestamp | Date | null;
   breaks: Break[];
   totalMinutes: number; // computed on clock-out
+  lunchDeducted?: boolean; // 30 min subtracted if true
   note?: string;
 }
 

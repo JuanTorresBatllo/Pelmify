@@ -80,6 +80,7 @@ const WORKERS = [
   { name: "Lakbira Sahiri",    plannedHoursPerWeek: 40 },
   { name: "Imran Muhammad",    plannedHoursPerWeek: 40 },
   { name: "Kateryna Nahorna",  plannedHoursPerWeek: 40 },
+  { name: "Prova Utente",      plannedHoursPerWeek: 0  },
 ];
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

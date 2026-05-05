@@ -32,6 +32,7 @@ function getInitials(name: string) {
 export default function KioskPage() {
   const [statuses, setStatuses] = useState<WorkerStatus[]>([]);
   const [selected, setSelected] = useState<WorkerStatus | null>(null);
+  const [pendingLunch, setPendingLunch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(new Date());
 
@@ -71,13 +72,20 @@ export default function KioskPage() {
     }
   };
 
-  const handleClockOut = async () => {
+  // Step 1: ask about lunch before committing clock-out
+  const handleClockOutRequest = () => {
+    setPendingLunch(true);
+  };
+
+  // Step 2: user answered — clock out with or without deduction
+  const handleLunchAnswer = async (lunchDeducted: boolean) => {
     if (!selected?.openEntry) return;
     setBusy(true);
     try {
-      await clockOut(selected.openEntry);
+      await clockOut(selected.openEntry, lunchDeducted);
       await refresh();
       setSelected(null);
+      setPendingLunch(false);
     } finally {
       setBusy(false);
     }
@@ -87,6 +95,44 @@ export default function KioskPage() {
   if (selected) {
     const isClockedIn = !!selected.openEntry;
     const colorIdx = statuses.findIndex((s) => s.worker.id === selected.worker.id);
+
+    // ── Lunch question screen ────────────────────────────────────────────────
+    if (pendingLunch) {
+      return (
+        <div className="min-h-[70vh] flex flex-col items-center justify-center gap-10 px-4">
+          <div className="text-center">
+            <div className="text-6xl mb-4">🍽️</div>
+            <h2 className="text-3xl font-display text-brand-700">{selected.worker.name}</h2>
+            <p className="mt-3 text-xl text-brand-500 font-medium">Hai fatto il pranzo?</p>
+            <p className="mt-1 text-sm text-slate-400">Se sì, verranno detratti 30 minuti.</p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-5">
+            <button
+              onClick={() => handleLunchAnswer(true)}
+              disabled={busy}
+              className="flex items-center justify-center gap-3 px-12 py-6 rounded-2xl bg-emerald-600 text-white text-2xl font-semibold shadow-lg hover:bg-emerald-700 active:scale-95 disabled:opacity-50 transition-all"
+            >
+              ✅ Pranzo Sì
+            </button>
+            <button
+              onClick={() => handleLunchAnswer(false)}
+              disabled={busy}
+              className="flex items-center justify-center gap-3 px-12 py-6 rounded-2xl bg-slate-500 text-white text-2xl font-semibold shadow-lg hover:bg-slate-600 active:scale-95 disabled:opacity-50 transition-all"
+            >
+              ❌ Pranzo No
+            </button>
+          </div>
+
+          <button
+            onClick={() => setPendingLunch(false)}
+            className="flex items-center gap-2 text-brand-400 hover:text-brand-700 transition-colors text-sm"
+          >
+            <ArrowLeft className="w-4 h-4" /> Annulla
+          </button>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center gap-10 px-4">
@@ -125,7 +171,7 @@ export default function KioskPage() {
           </button>
         ) : (
           <button
-            onClick={handleClockOut}
+            onClick={handleClockOutRequest}
             disabled={busy}
             className="flex items-center gap-3 px-12 py-6 rounded-2xl bg-red-600 text-white text-2xl font-semibold shadow-lg hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all"
           >
