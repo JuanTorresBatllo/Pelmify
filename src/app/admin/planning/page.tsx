@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Copy, Check, Users } from "lucide-react";
 import {
-  listUsers,
+  listWorkers,
   listAllSchedules,
   listSchedulesForUser,
   upsertSchedule,
@@ -80,7 +80,7 @@ export default function PlanningPage() {
 
   // Load users
   useEffect(() => {
-    listUsers().then((u) => {
+    listWorkers().then((u) => {
       const employees = u.filter((x) => x.active !== false);
       setUsers(employees);
       if (employees.length) setSelectedUserId(employees[0].id);

@@ -25,6 +25,14 @@ export async function listUsers(): Promise<UserProfile[]> {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<UserProfile, "id">) }));
 }
 
+export async function listWorkers(): Promise<UserProfile[]> {
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<UserProfile, "id">) }))
+    .filter((u) => u.role === "worker")
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function updateUser(userId: string, data: Partial<UserProfile>) {
   await updateDoc(doc(db, "users", userId), data);
 }

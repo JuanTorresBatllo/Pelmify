@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listAllEntries, listAllSchedules, listUsers, upsertSchedule, deleteSchedule } from "@/lib/db";
+import { listAllEntries, listAllSchedules, listWorkers, upsertSchedule, deleteSchedule } from "@/lib/db";
 import { Schedule, TimeEntry, UserProfile } from "@/types";
 import { CalendarView } from "@/components/CalendarView";
 import { Card, CardBody } from "@/components/Card";
@@ -19,7 +19,7 @@ export default function AdminCalendarPage() {
   const [note, setNote] = useState("");
 
   const refresh = async () => {
-    const [u, e, s] = await Promise.all([listUsers(), listAllEntries(), listAllSchedules()]);
+    const [u, e, s] = await Promise.all([listWorkers(), listAllEntries(), listAllSchedules()]);
     setUsers(u);
     setEntries(e);
     setSchedules(s);

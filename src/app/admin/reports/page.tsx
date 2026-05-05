@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listAllEntries, listUsers } from "@/lib/db";
+import { listAllEntries, listWorkers } from "@/lib/db";
 import { TimeEntry, UserProfile } from "@/types";
 import { Card, CardBody } from "@/components/Card";
 import { Button } from "@/components/Button";
@@ -21,7 +21,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     (async () => {
-      const [u, e] = await Promise.all([listUsers(), listAllEntries()]);
+      const [u, e] = await Promise.all([listWorkers(), listAllEntries()]);
       setUsers(u);
       setEntries(e);
     })();

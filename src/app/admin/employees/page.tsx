@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { deleteUserDoc, listUsers, updateUser } from "@/lib/db";
+import { deleteUserDoc, listWorkers, updateUser } from "@/lib/db";
 import { UserProfile } from "@/types";
 import { Card, CardBody } from "@/components/Card";
 import { Button } from "@/components/Button";
@@ -12,7 +12,7 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
-    setUsers(await listUsers());
+    setUsers(await listWorkers());
     setLoading(false);
   };
 
@@ -46,7 +46,7 @@ export default function EmployeesPage() {
       <div>
         <h1 className="text-2xl font-bold">Employees</h1>
         <p className="text-slate-500">
-          Employees sign up themselves from the login page. Here you can manage roles, planned hours, and active status.
+          Manage your team: planned hours and active status.
         </p>
       </div>
 

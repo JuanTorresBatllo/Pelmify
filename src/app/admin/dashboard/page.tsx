@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listUsers, listAllEntries } from "@/lib/db";
+import { listWorkers, listAllEntries } from "@/lib/db";
 import { TimeEntry, UserProfile } from "@/types";
 import { Card, CardBody } from "@/components/Card";
 import { formatMinutesAsHours, formatTime, toDate } from "@/lib/utils";
@@ -13,7 +13,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     (async () => {
-      const [u, e] = await Promise.all([listUsers(), listAllEntries()]);
+      const [u, e] = await Promise.all([listWorkers(), listAllEntries()]);
       setUsers(u);
       setEntries(e);
     })();

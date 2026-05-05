@@ -91,7 +91,30 @@ export function AppShell({
     );
   }
 
-  const nav = requiredRole === "admin" ? adminNav : employeeNav;
+  // ── Kiosk layout for the tablet (employee role) ───────────────────────────
+  if (requiredRole === "employee") {
+    return (
+      <div className="min-h-screen flex flex-col bg-cream-50">
+        <header className="bg-white/85 backdrop-blur-md border-b border-cream-200 flex items-center justify-between px-6 py-3 shrink-0">
+          <Brand />
+          <button
+            onClick={async () => {
+              await signOut();
+              router.replace("/login");
+            }}
+            className="flex items-center gap-2 text-sm text-brand-400 hover:text-brand-700 transition-colors"
+            aria-label="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
+        </header>
+        <main className="flex-1 p-6 md:p-10">{children}</main>
+      </div>
+    );
+  }
+
+  const nav = adminNav;
 
   return (
     <div className="min-h-screen flex">

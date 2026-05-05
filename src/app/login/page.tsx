@@ -8,9 +8,7 @@ import { Button } from "@/components/Button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, profile, loading, signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [name, setName] = useState("");
+  const { user, profile, loading, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,11 +25,7 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      if (mode === "signin") {
-        await signIn(email, password);
-      } else {
-        await signUp(name, email, password);
-      }
+      await signIn(email, password);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setError(msg);
@@ -62,28 +56,13 @@ export default function LoginPage() {
 
         <div className="bg-white/85 backdrop-blur-md rounded-2xl shadow-lift p-8 border border-cream-200">
           <h2 className="font-display text-2xl text-brand-700 mb-1">
-            {mode === "signin" ? "Welcome back" : "Join the team"}
+            Welcome back
           </h2>
           <p className="text-sm text-brand-400 mb-6">
-            {mode === "signin"
-              ? "Sign in to clock in and manage your week."
-              : "Create your account to get started."}
+            Sign in to manage your team.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <div>
-                <label className="block text-sm font-medium text-brand-600 mb-1">Full name</label>
-                <input
-                  type="text"
-                  required
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-lg border border-cream-200 px-3 py-2.5 focus:outline-none"
-                />
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-brand-600 mb-1">Email</label>
               <input
@@ -101,7 +80,7 @@ export default function LoginPage() {
                 type="password"
                 required
                 minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-cream-200 px-3 py-2.5 focus:outline-none"
@@ -113,33 +92,9 @@ export default function LoginPage() {
               </div>
             )}
             <Button type="submit" disabled={submitting} className="w-full" size="lg">
-              {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
+              {submitting ? "Please wait…" : "Sign in"}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-brand-400">
-            {mode === "signin" ? (
-              <>
-                Don&apos;t have an account?{" "}
-                <button
-                  onClick={() => setMode("signup")}
-                  className="text-ochre-600 font-medium hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => setMode("signin")}
-                  className="text-ochre-600 font-medium hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-brand-400">
